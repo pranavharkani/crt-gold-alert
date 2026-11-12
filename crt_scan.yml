@@ -1,0 +1,68 @@
+# GitHub ma aa file ni jagya: .github/workflows/crt_scan.yml
+name: CRT Box Scanner
+
+on:
+  schedule:
+    # dar 10 minute (top of the hour avoid, jethi delay ochho thay)
+    - cron: "3,13,23,33,43,53 * * * *"
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "Telegram Test Message moklo (true / false)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write        # state.json save karva mate
+
+concurrency:
+  group: crt-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -r requirements.txt
+
+      - name: Scan
+        env:
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT: ${{ secrets.TG_CHAT }}
+          TEST: ${{ inputs.test }}
+          # ---- Settings (jarur mujab badlo) ----
+          SYMBOL: "GC=F"
+          BOX_TF: "1H"                         # 1H ya 15m ya 5m
+          BOX_SOURCE: "Range Candle (previous)" # ya "CRT Candle"
+          EXTEND: "1"
+          SHOW_BULL: "true"
+          SHOW_BEAR: "true"
+          STRICT: "false"
+          IGNORE_OUTSIDE: "true"
+          ALLOW_OUTSIDE_CLOSE: "true"
+          USE_WINDOW: "false"
+          START_H: "18"
+          START_M: "0"
+          END_H: "8"
+          END_M: "0"
+          MAX_AGE_HOURS: "6"                   # aa karta junu box Telegram par nahi jay
+        run: python crt_box_github.py
+
+      - name: Save state
+        if: always()
+        run: |
+          if [ -f state.json ]; then
+            git config user.name "crt-bot"
+            git config user.email "crt-bot@users.noreply.github.com"
+            git add state.json
+            git diff --cached --quiet || (git commit -m "update state" && git push)
+          fi
